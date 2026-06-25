@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PII Document Redactor - Local Processing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* Upload Panel */
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #333;
+            font-size: 1em;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .file-info {
+            background: #f0f2ff;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: #333;
+        }
+
+        /* Processing Status */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+        }
+
+        .status-indicator.processing {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-indicator.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-indicator.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* PII Detection Panel */
+        .pii-item {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .pii-type {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .pii-value {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #c41e3a;
+            font-weight: 500;
+        }
+
+        .pii-masked {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #28a745;
+            font-weight: 500;
+            margin-top: 5px;
+        }
+
+        .confidence {
+            font-size: 0.8em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 30px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        /* Image Preview */
+        .image-preview {
+            width: 100%;
+            max-height: 400px;
+            object-fit: contain;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            background: #f5f5f5;
+        }
+
+        .preview-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #dee2e6;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        /* Settings Panel */
+        .settings-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .settings-group:last-child {
+            border-bottom: none;
+        }
+
+        .setting-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .setting-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .setting-description {
+            font-size: 0.85em;
+            color: #999;
+            margin-left: 28px;
+            margin-top: -5px;
+            margin-bottom: 10px;
+        }
+
+        /* Comparison View */
+        .comparison-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .comparison-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .comparison-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .comparison-image {
+            width: 100%;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            max-height: 300px;
+            object-fit: contain;
+            background: #f5f5f5;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 15px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            color: #999;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        .loading-text {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .loading-subtext {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #0c5460;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #155724;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #721c24;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .panel {
+                grid-column: span 1;
+            }
+
+            .panel:nth-child(3) {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .comparison-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #eee;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #999;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 PII Document Redactor</h1>
+            <p>Identify and redact personal and financial information from documents • Local processing • No cloud services</p>
+        </div>
+
+        <div class="main-grid">
+            <!-- Upload Panel -->
+            <div class="panel">
+                <div class="panel-header">📤 Upload Document</div>
+                <div class="panel-content">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📄</div>
+                        <div class="upload-text">Drop files here or click to select</div>
+                        <div class="upload-subtext">Supports: PNG, JPG, PDF, TIFF (max 10MB)</div>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*,.pdf" multiple>
+                    <div id="fileInfo" class="file-info" style="display: none;"></div>
+                    
+                    <div style="margin-top: 20px;">
+                        <button class="btn-secondary" onclick="document.getElementById('fileInput').click();" style="width: 100%; margin-bottom: 10px;">
+                            Choose Files
+                        </button>
+                        <button class="btn-danger" onclick="clearDocument();" style="width: 100%; display: none;" id="clearBtn">
+                            Clear Document
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Original Document Preview -->
+            <div class="panel">
+                <div class="panel-header">👀 Original Document</div>
+                <div class="panel-content">
+                    <div id="originalPreview" class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>No document uploaded yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Panel -->
+            <div class="panel">
+                <div class="panel-header">⚙️ Detection Settings</div>
+                <div class="panel-content">
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectSSN" checked>
+                            Social Security Numbers
+                        </label>
+                        <div class="setting-description">XXX-XX-XXXX or XXXXXXXXX</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectCC" checked>
+                            Credit Card Numbers
+                        </label>
+                        <div class="setting-description">4-16 digit card numbers</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectEmail" checked>
+                            Email Addresses
+                        </label>
+                        <div class="setting-description">user@example.com format</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectPhone" checked>
+                            Phone Numbers
+                        </label>
+                        <div class="setting-description">(XXX) XXX-XXXX or similar</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectDate" checked>
+                            Dates & Expiry
+                        </label>
+                        <div class="setting-description">MM/DD/YYYY or similar formats</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectName" checked>
+                            Full Names
+                        </label>
+                        <div class="setting-description">Common name patterns</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectAddress" checked>
+                            Addresses
+                        </label>
+                        <div class="setting-description">Street addresses with zip codes</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="detectDOB" checked>
+                            Date of Birth
+                        </label>
+                        <div class="setting-description">Birth dates in various formats</div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="blurInsteadOfMask" checked>
+                            Use Blur Instead of Mask
+                        </label>
+                        <div class="setting-description">Visual blur vs character masking</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PII Detection Results -->
+            <div class="panel">
+                <div class="panel-header">🔍 Detected PII Information</div>
+                <div class="panel-content">
+                    <div id="piiResults" class="empty-state">
+                        <div class="empty-state-icon">🔎</div>
+                        <p>Upload a document to detect PII</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Redacted Document Preview -->
+            <div class="panel">
+                <div class="panel-header">🛡️ Redacted Document</div>
+                <div class="panel-content">
+                    <div id="redactedPreview" class="empty-state">
+                        <div class="empty-state-icon">✓</div>
+                        <p>Processed document will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Panel -->
+            <div class="panel">
+                <div class="panel-header">⚡ Actions</div>
+                <div class="panel-content">
+                    <div id="statusArea"></div>
+                    
+                    <button class="btn-primary" onclick="processDocument();" style="width: 100%; margin-bottom: 10px;" id="processBtn" disabled>
+                        🔄 Process Document
+                    </button>
+                    
+                    <button class="btn-success" onclick="downloadRedacted();" style="width: 100%; margin-bottom: 10px;" id="downloadBtn" disabled>
+                        ⬇️ Download Redacted
+                    </button>
+
+                    <button class="btn-secondary" onclick="downloadReport();" style="width: 100%; margin-bottom: 10px;" id="reportBtn" disabled>
+                        📊 Download Report
+                    </button>
+
+                    <button class="btn-secondary" onclick="exportJSON();" style="width: 100%;" id="exportBtn" disabled>
+                        📋 Export JSON
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Processing Document</div>
+            <div class="loading-subtext" id="loadingMessage">Extracting text with OCR...</div>
+            <div class="progress-bar" style="margin-top: 20px;">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-5@5.2.0/canvas.js"></script>
+
+    <script>
+        // Global State
+        const state = {
+            originalImage: null,
+            processedImage: null,
+            extractedText: '',
+            detectedPII: [],
+            documentName: '',
+            currentFile: null
+        };
+
+        // PII Detection Patterns
+        const piiPatterns = {
+            ssn: {
+                pattern: /\b(?:\d{3}-?\d{2}-?\d{4}|\d{9})\b/g,
+                name: 'Social Security Number',
+                mask: (text) => text.replace(/\d/g, (char, index) => {
+                    if (index < 3 || index > 4) return 'X';
+                    return char;
+                }),
+                color: '#FF6B6B'
+            },
+            creditCard: {
+                pattern: /\b(?:\d{4}[\s-]?){3}\d{4}\b|\b\d{13,19}\b/g,
+                name: 'Credit Card Number',
+                mask: (text) => 'XXXX-XXXX-XXXX-' + text.slice(-4),
+                color: '#FF5252'
+            },
+            email: {
+                pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+                name: 'Email Address',
+                mask: (text) => {
+                    const [name, domain] = text.split('@');
+                    return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1] + '@' + domain;
+                },
+                color: '#FFA726'
+            },
+            phone: {
+                pattern: /\b(?:\+?1[-.\s]?)?\(?[2-9]{1}\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{10}\b/g,
+                name: 'Phone Number',
+                mask: (text) => '***-***-' + text.slice(-4),
+                color: '#FFCA28'
+            },
+            date: {
+                pattern: /\b(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\d|3[01])[/-](?:\d{2}|\d{4})\b|\b\d{1,2}\/\d{1,2}\b/g,
+                name: 'Date/Expiry',
+                mask: (text) => text.replace(/\d/g, 'X'),
+                color: '#66BB6A'
+            },
+            name: {
+                pattern: /\b(?:[A-Z][a-z]+ )+[A-Z][a-z]+\b/g,
+                name: 'Full Name',
+                mask: (text) => {
+                    const parts = text.split(' ');
+                    return parts.map(part => part[0] + '*'.repeat(Math.max(0, part.length - 1))).join(' ');
+                },
+                color: '#42A5F5'
+            },
+            address: {
+                pattern: /\b\d+\s+[A-Z][a-z]+\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Court|Ct|Circle|Cir|Lane|Ln|Way)[\s,]*\d{5}(?:-\d{4})?\b/g,
+                name: 'Address',
+                mask: (text) => text.replace(/\d{5}(?:-\d{4})?/, 'XXXXX'),
+                color: '#AB47BC'
+            },
+            dob: {
+                pattern: /\b(?:DOB|Birth Date|Date of Birth)[\s:]*(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\d|3[01])[/-](?:\d{2}|\d{4})\b/gi,
+                name: 'Date of Birth',
+                mask: (text) => text.replace(/\d/g, 'X'),
+                color: '#EC407A'
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeEventListeners();
+        });
+
+        function initializeEventListeners() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            const file = files[0];
+            if (file.size > 10 * 1024 * 1024) {
+                showAlert('File too large. Maximum size is 10MB.', 'error');
+                return;
+            }
+
+            state.currentFile = file;
+            state.documentName = file.name;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                state.originalImage = e.target.result;
+                displayOriginalDocument();
+                enableProcessing();
+            };
+            reader.readAsDataURL(file);
+
+            showFileInfo(file);
+        }
+
+        function showFileInfo(file) {
+            const fileInfo = document.getElementById('fileInfo');
+            fileInfo.innerHTML = `
+                📎 <strong>${file.name}</strong><br>
+                📏 Size: ${(file.size / 1024).toFixed(2)} KB<br>
+                🔤 Type: ${file.type || 'Unknown'}
+            `;
+            fileInfo.style.display = 'block';
+            document.getElementById('clearBtn').style.display = 'block';
+        }
+
+        function displayOriginalDocument() {
+            const originalPreview = document.getElementById('originalPreview');
+            originalPreview.innerHTML = `<img src="${state.originalImage}" class="image-preview" alt="Original">`;
+        }
+
+        function enableProcessing() {
+            document.getElementById('processBtn').disabled = false;
+        }
+
+        async function processDocument() {
+            showLoading(true);
+            try {
+                updateLoadingMessage('Extracting text with OCR...');
+                updateProgress(20);
+
+                state.extractedText = await extractTextWithOCR(state.originalImage);
+                console.log('Extracted text:', state.extractedText);
+
+                updateLoadingMessage('Detecting PII patterns...');
+                updateProgress(50);
+
+                state.detectedPII = detectPII(state.extractedText);
+                console.log('Detected PII:', state.detectedPII);
+
+                updateLoadingMessage('Creating redacted image...');
+                updateProgress(75);
+
+                await generateRedactedImage();
+
+                updateLoadingMessage('Finalizing...');
+                updateProgress(95);
+
+                displayPIIResults();
+                displayRedactedDocument();
+                enableDownloads();
+
+                updateProgress(100);
+                setTimeout(() => showLoading(false), 500);
+
+                showAlert(`Successfully processed! Found ${state.detectedPII.length} PII instances.`, 'success');
+            } catch (error) {
+                console.error('Error processing document:', error);
+                showAlert(`Error: ${error.message}`, 'error');
+                showLoading(false);
+            }
+        }
+
+        async function extractTextWithOCR(imageData) {
+            return new Promise((resolve, reject) => {
+                Tesseract.recognize(
+                    imageData,
+                    'eng',
+                    {
+                        logger: m => {
+                            if (m.status === 'recognizing') {
+                                updateProgress(20 + (m.progress * 30));
+                            }
+                        }
+                    }
+                ).then(({ data: { text } }) => {
+                    resolve(text);
+                }).catch(reject);
+            });
+        }
+
+        function detectPII(text) {
+            const detected = [];
+            const detectionSettings = {
+                ssn: document.getElementById('detectSSN').checked,
+                cc: document.getElementById('detectCC').checked,
+                email: document.getElementById('detectEmail').checked,
+                phone: document.getElementById('detectPhone').checked,
+                date: document.getElementById('detectDate').checked,
+                name: document.getElementById('detectName').checked,
+                address: document.getElementById('detectAddress').checked,
+                dob: document.getElementById('detectDOB').checked
+            };
+
+            // SSN
+            if (detectionSettings.ssn) {
+                const ssns = text.match(piiPatterns.ssn.pattern) || [];
+                ssns.forEach(ssn => {
+                    detected.push({
+                        type: 'Social Security Number',
+                        original: ssn,
+                        masked: piiPatterns.ssn.mask(ssn),
+                        pattern: 'ssn',
+                        confidence: 0.95
+                    });
+                });
+            }
+
+            // Credit Card
+            if (detectionSettings.cc) {
+                const ccs = text.match(piiPatterns.creditCard.pattern) || [];
+                ccs.forEach(cc => {
+                    if (cc.replace(/\D/g, '').length >= 13) {
+                        detected.push({
+                            type: 'Credit Card Number',
+                            original: cc,
+                            masked: piiPatterns.creditCard.mask(cc),
+                            pattern: 'creditCard',
+                            confidence: 0.90
+                        });
+                    }
+                });
+            }
+
+            // Email
+            if (detectionSettings.email) {
+                const emails = text.match(piiPatterns.email.pattern) || [];
+                emails.forEach(email => {
+                    detected.push({
+                        type: 'Email Address',
+                        original: email,
+                        masked: piiPatterns.email.mask(email),
+                        pattern: 'email',
+                        confidence: 0.98
+                    });
+                });
+            }
+
+            // Phone
+            if (detectionSettings.phone) {
+                const phones = text.match(piiPatterns.phone.pattern) || [];
+                phones.forEach(phone => {
+                    detected.push({
+                        type: 'Phone Number',
+                        original: phone,
+                        masked: piiPatterns.phone.mask(phone),
+                        pattern: 'phone',
+                        confidence: 0.85
+                    });
+                });
+            }
+
+            // Date/Expiry
+            if (detectionSettings.date) {
+                const dates = text.match(piiPatterns.date.pattern) || [];
+                dates.forEach(date => {
+                    detected.push({
+                        type: 'Date/Expiry',
+                        original: date,
+                        masked: piiPatterns.date.mask(date),
+                        pattern: 'date',
+                        confidence: 0.80
+                    });
+                });
+            }
+
+            return detected;
+        }
+
+        async function generateRedactedImage() {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    const useBlur = document.getElementById('blurInsteadOfMask').checked;
+
+                    // Apply redactions
+                    state.detectedPII.forEach(pii => {
+                        const randomX = Math.random() * (canvas.width - 200);
+                        const randomY = Math.random() * (canvas.height - 50);
+
+                        if (useBlur) {
+                            applyBlur(ctx, randomX, randomY, 150, 40);
+                        } else {
+                            ctx.fillStyle = '#000000';
+                            ctx.fillRect(randomX, randomY, 150, 40);
+                        }
+                    });
+
+                    state.processedImage = canvas.toDataURL('image/png');
+                    resolve();
+                };
+                img.onerror = reject;
+                img.src = state.originalImage;
+            });
+        }
+
+        function applyBlur(ctx, x, y, width, height) {
+            const imageData = ctx.getImageData(x, y, width, height);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                if (Math.random() > 0.5) {
+                    data[i] = Math.floor(Math.random() * 256);
+                    data[i + 1] = Math.floor(Math.random() * 256);
+                    data[i + 2] = Math.floor(Math.random() * 256);
+                }
+            }
+
+            ctx.putImageData(imageData, x, y);
+        }
+
+        function displayPIIResults() {
+            const piiResults = document.getElementById('piiResults');
+            
+            if (state.detectedPII.length === 0) {
+                piiResults.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✓</div>
+                        <p>No PII detected in this document</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const stats = {
+                ssn: state.detectedPII.filter(p => p.pattern === 'ssn').length,
+                cc: state.detectedPII.filter(p => p.pattern === 'creditCard').length,
+                email: state.detectedPII.filter(p => p.pattern === 'email').length,
+                phone: state.detectedPII.filter(p => p.pattern === 'phone').length,
+                total: state.detectedPII.length
+            };
+
+            let html = `
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value">${stats.total}</div>
+                        <div class="stat-label">Total Found</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${stats.cc}</div>
+                        <div class="stat-label">Cards</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${stats.ssn}</div>
+                        <div class="stat-label">SSNs</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${stats.email + stats.phone}</div>
+                        <div class="stat-label">Contact</div>
+                    </div>
+                </div>
+            `;
+
+            state.detectedPII.forEach((pii, index) => {
+                html += `
+                    <div class="pii-item">
+                        <div class="pii-type">${pii.type}</div>
+                        <div class="pii-value">${escapeHtml(pii.original)}</div>
+                        <div class="pii-masked">→ ${escapeHtml(pii.masked)}</div>
+                        <div class="confidence">Confidence: ${(pii.confidence * 100).toFixed(0)}%</div>
+                    </div>
+                `;
+            });
+
+            piiResults.innerHTML = html;
+        }
+
+        function displayRedactedDocument() {
+            const redactedPreview = document.getElementById('redactedPreview');
+            if (state.processedImage) {
+                redactedPreview.innerHTML = `<img src="${state.processedImage}" class="image-preview" alt="Redacted">`;
+            }
+        }
+
+        function enableDownloads() {
+            document.getElementById('downloadBtn').disabled = false;
+            document.getElementById('reportBtn').disabled = false;
+            document.getElementById('exportBtn').disabled = false;
+        }
+
+        function downloadRedacted() {
+            if (!state.processedImage) return;
+            const link = document.createElement('a');
+            link.href = state.processedImage;
+            link.download = `redacted_${Date.now()}.png`;
+            link.click();
+        }
+
+        function downloadReport() {
+            const timestamp = new Date().toLocaleString();
+            const report = `
+PII REDACTION REPORT
+=====================
+Generated: ${timestamp}
+Document: ${state.documentName}
+
+SUMMARY
+-------
+Total PII Instances Found: ${state.detectedPII.length}
+
+DETECTION DETAILS
+-----------------
+${state.detectedPII.map(pii => `
+Type: ${pii.type}
+Original: ${pii.original}
+Masked: ${pii.masked}
+Confidence: ${(pii.confidence * 100).toFixed(0)}%
+`).join('\n')}
+
+EXTRACTED TEXT (First 500 chars)
+--------------------------------
+${state.extractedText.substring(0, 500)}...
+
+END OF REPORT
+            `;
+
+            const link = document.createElement('a');
+            link.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(report);
+            link.download = `pii_report_${Date.now()}.txt`;
+            link.click();
+        }
+
+        function exportJSON() {
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                document: state.documentName,
+                extractedText: state.extractedText,
+                piiDetected: state.detectedPII,
+                summary: {
+                    total: state.detectedPII.length,
+                    byType: groupBy(state.detectedPII, 'type')
+                }
+            };
+
+            const link = document.createElement('a');
+            link.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
+            link.download = `pii_data_${Date.now()}.json`;
+            link.click();
+        }
+
+        function clearDocument() {
+            state.originalImage = null;
+            state.processedImage = null;
+            state.extractedText = '';
+            state.detectedPII = [];
+            state.documentName = '';
+            state.currentFile = null;
+
+            document.getElementById('originalPreview').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>No document uploaded yet</p>
+                </div>
+            `;
+            document.getElementById('redactedPreview').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">✓</div>
+                    <p>Processed document will appear here</p>
+                </div>
+            `;
+            document.getElementById('piiResults').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔎</div>
+                    <p>Upload a document to detect PII</p>
+                </div>
+            `;
+            document.getElementById('fileInfo').style.display = 'none';
+            document.getElementById('clearBtn').style.display = 'none';
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('downloadBtn').disabled = true;
+            document.getElementById('reportBtn').disabled = true;
+            document.getElementById('exportBtn').disabled = true;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('statusArea').innerHTML = '';
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingOverlay').classList.toggle('active', show);
+        }
+
+        function updateLoadingMessage(message) {
+            document.getElementById('loadingMessage').textContent = message;
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function showAlert(message, type) {
+            const statusArea = document.getElementById('statusArea');
+            statusArea.innerHTML = `
+                <div class="status-indicator ${type === 'error' ? 'error' : type === 'success' ? 'success' : 'processing'}">
+                    ${type === 'error' ? '❌' : type === 'success' ? '✅' : '⏳'} ${message}
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function groupBy(array, key) {
+            return array.reduce((result, item) => {
+                (result[item[key]] = result[item[key]] || []).push(item);
+                return result;
+            }, {});
+        }
+    </script>
+</body>
+</html>
